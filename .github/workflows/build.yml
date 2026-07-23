@@ -1,5 +1,6 @@
 name: Build MidpointUltraBoostPvP
 
+# Собираем при пуше/PR в любую ветку и вручную (кнопка Run workflow)
 on:
   push:
     branches: [ "**" ]
@@ -14,61 +15,29 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout (если уже есть)
+      - name: Checkout репозитория
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Download & Unzip MidpointUltraBoostPvP ZIP
-        run: |
-          set -euo pipefail
-
-          # Скачиваем надёжно (raw + fallback на GitHub archive)
-          curl -L -f -o midpoint-ultra-boost-pvp.zip \
-            https://raw.githubusercontent.com/midpoint/midpoint-ultra-boost-pvp/main/midpoint-ultra-boost-pvp.zip || \
-          curl -L -f -o midpoint-ultra-boost-pvp.zip \
-            https://github.com/midpoint/midpoint-ultra-boost-pvp/archive/refs/heads/main.zip
-
-          if [ ! -s midpoint-ultra-boost-pvp.zip ]; then
-            echo "❌ ZIP не скачался" && exit 1
-          fi
-
-          echo "✅ ZIP скачан успешно ($(du -h midpoint-ultra-boost-pvp.zip | cut -f1))"
-
-          # Распаковка
-          unzip -q midpoint-ultra-boost-pvp.zip
-          rm midpoint-ultra-boost-pvp.zip
-
-          # Переименовываем папку в mod-project (как в твоём README)
-          if [ -d "midpoint-ultra-boost-pvp" ]; then
-            mv midpoint-ultra-boost-pvp mod-project
-          elif [ -d "midpoint-ultra-boost-pvp-main" ]; then
-            mv midpoint-ultra-boost-pvp-main mod-project
-          else
-            echo "❌ Не найдена папка с модом" && exit 1
-          fi
-
-          echo "✅ Распаковано в mod-project"
-
-      # Остальное — стандартная сборка Fabric Loom
-      - name: Setup Java 21
+      - name: Установка JDK 21 (обязателен для Minecraft 1.21.4 / Fabric Loom)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Setup Gradle
+      # Используем официальный action Gradle — он сам скачает нужную версию
+      # Gradle, поэтому commit'ить gradle-wrapper.jar в репозиторий не нужно.
+      - name: Настройка Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
 
-      - name: Build
-        run: ./gradlew build --stacktrace --no-daemon
-        working-directory: ./mod-project
+      - name: Сборка мода (gradle build)
+        run: gradle build --stacktrace --no-daemon
 
-      - name: Upload artifact
+      # Готовый .jar мода лежит в build/libs/
+      - name: Публикация собранного .jar как артефакта сборки
         uses: actions/upload-artifact@v4
         with:
           name: midpoint-ultra-boost-pvp
-          path: mod-project/build/libs/*.jar
+          path: build/libs/*.jar
           if-no-files-found: error
