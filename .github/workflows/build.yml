@@ -1,6 +1,5 @@
 name: Build MidpointUltraBoostPvP
 
-# Собираем при пуше/PR в любую ветку и вручную (кнопка Run workflow)
 on:
   push:
     branches: [ "**" ]
@@ -18,26 +17,63 @@ jobs:
       - name: Checkout репозитория
         uses: actions/checkout@v4
 
+      # ---------------------------------------------------------------
+      # Ищем zip-архив с проектом мода, распаковываем его и находим
+      # реальную папку с build.gradle (даже если внутри архива есть
+      # лишняя вложенная папка вроде mod-project/).
+      # Результат — переменная PROJECT_DIR, указывающая на папку,
+      # где реально лежит build.gradle.
+      # ---------------------------------------------------------------
+      - name: Распаковка zip-архива мода
+        id: unpack
+        run: |
+          set -e
+
+          ZIP_FILE=$(find . -maxdepth 1 -name "*.zip" | head -n 1)
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "Zip-архив не найден в корне репозитория, пропускаем распаковку."
+            echo "Ищем build.gradle напрямую в репозитории..."
+          else
+            echo "Найден архив: $ZIP_FILE"
+            mkdir -p extracted
+            unzip -q "$ZIP_FILE" -d extracted
+            echo "Содержимое после распаковки:"
+            find extracted -maxdepth 2
+          fi
+
+          GRADLE_FILE=$(find . -name "build.gradle" \
+            -not -path "*/.git/*" \
+            -not -path "*/.gradle/*" \
+            | head -n 1)
+
+          if [ -z "$GRADLE_FILE" ]; then
+            echo "::error::build.gradle не найден нигде в репозитории после распаковки!"
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$GRADLE_FILE")
+          echo "Найден проект в папке: $PROJECT_DIR"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
+
       - name: Установка JDK 21 (обязателен для Minecraft 1.21.4 / Fabric Loom)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '21'
 
-      # Используем официальный action Gradle — он сам скачает нужную версию
-      # Gradle, поэтому commit'ить gradle-wrapper.jar в репозиторий не нужно.
       - name: Настройка Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
 
       - name: Сборка мода (gradle build)
+        working-directory: ${{ steps.unpack.outputs.PROJECT_DIR }}
         run: gradle build --stacktrace --no-daemon
 
-      # Готовый .jar мода лежит в build/libs/
       - name: Публикация собранного .jar как артефакта сборки
         uses: actions/upload-artifact@v4
         with:
           name: midpoint-ultra-boost-pvp
-          path: build/libs/*.jar
+          path: ${{ steps.unpack.outputs.PROJECT_DIR }}/build/libs/*.jar
           if-no-files-found: error
