@@ -1,6 +1,5 @@
 name: Build MidpointUltraBoostPvP
 
-# Запускается при любом push, PR или вручную
 on:
   push:
     branches: [ "**" ]
@@ -15,22 +14,43 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Скачиваем архив
-      - name: Download ZIP
-        run: |
-          curl -L -o midpoint-ultra-boost-pvp.zip \
-            https://raw.githubusercontent.com/midpoint/midpoint-ultra-boost-pvp/main/midpoint-ultra-boost-pvp.zip \
-            || curl -L -o midpoint-ultra-boost-pvp.zip \
-               https://github.com/midpoint/midpoint-ultra-boost-pvp/archive/main.zip
+      - name: Checkout (если уже есть)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      # 2. Распаковываем
-      - name: Unzip
+      - name: Download & Unzip MidpointUltraBoostPvP ZIP
         run: |
+          set -euo pipefail
+
+          # Скачиваем надёжно (raw + fallback на GitHub archive)
+          curl -L -f -o midpoint-ultra-boost-pvp.zip \
+            https://raw.githubusercontent.com/midpoint/midpoint-ultra-boost-pvp/main/midpoint-ultra-boost-pvp.zip || \
+          curl -L -f -o midpoint-ultra-boost-pvp.zip \
+            https://github.com/midpoint/midpoint-ultra-boost-pvp/archive/refs/heads/main.zip
+
+          if [ ! -s midpoint-ultra-boost-pvp.zip ]; then
+            echo "❌ ZIP не скачался" && exit 1
+          fi
+
+          echo "✅ ZIP скачан успешно ($(du -h midpoint-ultra-boost-pvp.zip | cut -f1))"
+
+          # Распаковка
           unzip -q midpoint-ultra-boost-pvp.zip
-          mv midpoint-ultra-boost-pvp mod-project || mv midpoint-ultra-boost-pvp-main mod-project
           rm midpoint-ultra-boost-pvp.zip
 
-      # 3. Настройка JDK + Gradle (Fabric 1.21.4 требует именно так)
+          # Переименовываем папку в mod-project (как в твоём README)
+          if [ -d "midpoint-ultra-boost-pvp" ]; then
+            mv midpoint-ultra-boost-pvp mod-project
+          elif [ -d "midpoint-ultra-boost-pvp-main" ]; then
+            mv midpoint-ultra-boost-pvp-main mod-project
+          else
+            echo "❌ Не найдена папка с модом" && exit 1
+          fi
+
+          echo "✅ Распаковано в mod-project"
+
+      # Остальное — стандартная сборка Fabric Loom
       - name: Setup Java 21
         uses: actions/setup-java@v4
         with:
@@ -42,12 +62,10 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-      # 4. Сборка (твой оригинальный gradle build)
       - name: Build
         run: ./gradlew build --stacktrace --no-daemon
         working-directory: ./mod-project
 
-      # 5. Артефакт
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
