@@ -1,6 +1,6 @@
 name: Build MidpointUltraBoostPvP
 
-# Собираем при пуше/PR в любую ветку и вручную (кнопка Run workflow)
+# Запускается при любом push, PR или вручную
 on:
   push:
     branches: [ "**" ]
@@ -15,29 +15,42 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout репозитория
-        uses: actions/checkout@v4
+      # 1. Скачиваем архив
+      - name: Download ZIP
+        run: |
+          curl -L -o midpoint-ultra-boost-pvp.zip \
+            https://raw.githubusercontent.com/midpoint/midpoint-ultra-boost-pvp/main/midpoint-ultra-boost-pvp.zip \
+            || curl -L -o midpoint-ultra-boost-pvp.zip \
+               https://github.com/midpoint/midpoint-ultra-boost-pvp/archive/main.zip
 
-      - name: Установка JDK 21 (обязателен для Minecraft 1.21.4 / Fabric Loom)
+      # 2. Распаковываем
+      - name: Unzip
+        run: |
+          unzip -q midpoint-ultra-boost-pvp.zip
+          mv midpoint-ultra-boost-pvp mod-project || mv midpoint-ultra-boost-pvp-main mod-project
+          rm midpoint-ultra-boost-pvp.zip
+
+      # 3. Настройка JDK + Gradle (Fabric 1.21.4 требует именно так)
+      - name: Setup Java 21
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '21'
 
-      # Используем официальный action Gradle — он сам скачает нужную версию
-      # Gradle, поэтому commit'ить gradle-wrapper.jar в репозиторий не нужно.
-      - name: Настройка Gradle
+      - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
 
-      - name: Сборка мода (gradle build)
-        run: gradle build --stacktrace --no-daemon
+      # 4. Сборка (твой оригинальный gradle build)
+      - name: Build
+        run: ./gradlew build --stacktrace --no-daemon
+        working-directory: ./mod-project
 
-      # Готовый .jar мода лежит в build/libs/
-      - name: Публикация собранного .jar как артефакта сборки
+      # 5. Артефакт
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: midpoint-ultra-boost-pvp
-          path: build/libs/*.jar
+          path: mod-project/build/libs/*.jar
           if-no-files-found: error
